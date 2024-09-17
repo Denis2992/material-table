@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -9,7 +9,10 @@ import { FormLayerComponent } from '../../feature-form-layer/form-layer/form-lay
 import { PeriodicTableFacade } from '../../domain/facade/facade';
 import { ValueCategoryType } from '../../domain/types/value-category.type';
 import { ValueCategory } from '../../domain/enums/value-category.enum';
+import { delay, of, take } from 'rxjs';
+import { UntilDestroy, untilDestroyed } from '@ngneat/until-destroy';
 
+@UntilDestroy()
 @Component({
   selector: 'app-table',
   standalone: true,
@@ -20,6 +23,7 @@ import { ValueCategory } from '../../domain/enums/value-category.enum';
 export class TableComponent implements OnInit {
   readonly dialog = inject(MatDialog);
   readonly tableFacade = inject(PeriodicTableFacade);
+  readonly destroyRef = inject(DestroyRef);
 
   displayedColumns: string[] = [
     ValueCategory.POSITION,
@@ -36,10 +40,12 @@ export class TableComponent implements OnInit {
   }
 
   applyFilter(event: Event) {
-    setTimeout(() => {
-      const filterValue = (event.target as HTMLInputElement).value;
-      this.dataSource.filter = filterValue.trim().toLowerCase();
-    }, 2000);
+    of(event)
+      .pipe(delay(2000), take(1))
+      .subscribe((event) => {
+        const filterValue = (event.target as HTMLInputElement).value;
+        this.dataSource.filter = filterValue.trim().toLowerCase();
+      });
   }
 
   openLayer(editElement: PeriodicElement, valueCategory: ValueCategoryType) {
@@ -50,13 +56,16 @@ export class TableComponent implements OnInit {
       },
     });
 
-    dialogRef.afterClosed().subscribe((layerData) => {
-      if (!layerData?.changedValue) {
-        return;
-      }
+    dialogRef
+      .afterClosed()
+      .pipe(untilDestroyed(this.destroyRef))
+      .subscribe((layerData) => {
+        if (!layerData?.changedValue) {
+          return;
+        }
 
-      const index = this.dataSource.data.indexOf(editElement);
-      this.dataSource.data[index][valueCategory] = layerData.changedValue;
-    });
+        const index = this.dataSource.data.indexOf(editElement);
+        this.dataSource.data[index][valueCategory] = layerData.changedValue;
+      });
   }
 }
